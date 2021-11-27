@@ -1,6 +1,7 @@
 <template>
   <div class="clock" @click="next">
     <h1>{{(time / 60 | 0).pad(2)}}:{{(time % 60).pad(2)}}</h1>
+    <h2>{{data.turn}} is aan de beurt!</h2>
   </div>
 </template>
 
@@ -16,13 +17,25 @@ Number.prototype.pad = function(size) {
 const firestore = firebase.firestore();
 
 export default {
-  name: "clock",
+  name: "Clock",
   data: () => ({
-    name: "koen",
-    game: "test",
+    name: "",
+    game: "",
     reference: null,
     data: null,
+    loop: null,
   }),
+  mounted() {
+    this.name = this.$route.query.name;
+    this.game = this.$route.query.game;
+
+    this.reference = firestore.collection("clock").doc(this.game);
+
+    this.reference.onSnapshot(snapshot => {
+      this.data = snapshot.data();
+      if (this.turn && !this.loop) this.start();
+    });
+  },
   computed: {
     time() {
       if (!this.init) return 0;
@@ -36,24 +49,24 @@ export default {
       return this.data.turn === this.name;
     },
   },
-  mounted() {
-
-    this.reference = firestore.collection("clock").doc(this.game);
-
-    this.reference.onSnapshot(snapshot => {
-      this.data = snapshot.data();
-    });
-    this.start();
-  },
   methods: {
     start() {
-      const loop = setInterval(() => {
-        if (!this.turn) clearInterval(loop);
+      this.loop = setInterval(() => {
+        if (!this.turn) {
+          clearInterval(this.loop);
+          this.loop = null;
+        }
         this.data.time[this.name] -= 1;
         this.reference.set(this.data);
       }, 1000);
     },
     next() {
+      if (this.data.turn === "start") {
+        this.data.turn = this.data.players[0];
+        this.reference.set(this.data);
+        return;
+      }
+
       if (!this.turn) return;
       const players = this.data.players;
       let i = players.indexOf(this.name);
